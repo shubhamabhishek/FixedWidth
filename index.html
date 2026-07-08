@@ -167,11 +167,8 @@
     outline-offset:-1px;
     background:#fff;
   }
-  input.pad-input{text-align:center;}
   .col-len{width:80px;}
   .col-type{width:130px;}
-  .col-align{width:110px;}
-  .col-pad{width:70px;}
   .col-del{width:36px;}
 
   .icon-btn{
@@ -265,7 +262,7 @@
     min-height:60px;
     margin:0;
   }
-  .output-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center;}
+  .output-actions{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
   .char-count{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);}
   .copy-flash{color:var(--good);font-size:12.5px;font-family:var(--mono);opacity:0;transition:opacity .2s;}
   .copy-flash.show{opacity:1;}
@@ -300,8 +297,6 @@
           <th>Name</th>
           <th class="col-len">Length</th>
           <th class="col-type">Type</th>
-          <th class="col-align">Align</th>
-          <th class="col-pad">Pad</th>
           <th class="col-del"></th>
         </tr>
       </thead>
@@ -317,12 +312,12 @@
     </div>
 
     <div class="paste-box" id="pasteFieldsBox">
-      <textarea id="pasteFieldsText" placeholder="Paste from Excel or type, one field per line.&#10;Supported layouts:&#10;  Length&#9;Type&#10;  Name&#9;Length&#9;Type&#10;  Name&#9;Length&#9;Type&#9;Align&#9;Pad&#10;&#10;Types: Number, Uppercase, Lowercase, Modifiers, Space&#10;&#10;Example:&#10;4&#9;Number&#10;2&#9;Space&#10;4&#9;Uppercase&#10;3&#9;Modifiers"></textarea>
+      <textarea id="pasteFieldsText" placeholder="Paste from Excel or type, one field per line.&#10;Supported layouts:&#10;  Length&#9;Type&#10;  Name&#9;Length&#9;Type&#10;&#10;Types: Number, Uppercase, Lowercase, Modifiers, Space&#10;&#10;Example:&#10;4&#9;Number&#10;2&#9;Space&#10;4&#9;Uppercase&#10;3&#9;Modifiers"></textarea>
       <div class="paste-actions">
         <button class="btn primary" id="parseFieldsBtn">Parse &amp; replace fields</button>
         <button class="btn ghost" id="cancelPasteFieldsBtn">Cancel</button>
       </div>
-      <p class="paste-note">Paste a 2-column list (Length, Type) — names are auto-generated — or a 3+ column list (Name, Length, Type, [Align], [Pad]). Tab-separated (Excel paste) or comma-separated both work. A header row is detected and skipped automatically. Valid types: Number, Uppercase, Lowercase, Modifiers, Space.</p>
+      <p class="paste-note">Paste a 2-column list (Length, Type) — names are auto-generated — or a 3-column list (Name, Length, Type). Tab-separated (Excel paste) or comma-separated both work. A header row is detected and skipped automatically. Valid types: Number, Uppercase, Lowercase, Modifiers, Space.</p>
       <div id="parseFieldsMsg"></div>
     </div>
   </section>
@@ -331,7 +326,6 @@
   <section>
     <h2><span class="num">02</span> Output</h2>
     <p class="hint">Every line is exactly <span id="totalWidthLabel">0</span> characters wide, randomly generated from the field definitions above.</p>
-    <pre id="output"></pre>
     <div class="output-actions">
       <button class="btn primary" id="generateBtn">↻ Generate</button>
       <div class="rows-control">
@@ -343,22 +337,19 @@
       <span class="copy-flash" id="copyFlash">Copied</span>
       <span class="char-count" id="lineCount"></span>
     </div>
+    <pre id="output"></pre>
   </section>
 
 </div>
 
 <script>
 // ---------- State ----------
-let fields = []; // {id, name, length, type, align, pad}
+let fields = []; // {id, name, length, type}
 let generatedLines = [];
 let uid = 1;
 const nextId = () => uid++;
 
 const TYPES = ['Number','Uppercase','Lowercase','Modifiers','Space'];
-const ALIGNS = ['Left','Right'];
-const TYPES_WITH_ALIGN = [];
-
-function defaultAlignFor(type){ return 'Left'; }
 
 const DIGIT_CHARS = '0123456789';
 const UPPER_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -367,10 +358,10 @@ const MODIFIER_CHARS = '!@#$%^&*()-_=+[]{}<>?/~';
 
 function loadExample(){
   fields = [
-    {id: nextId(), name:'ID',   length:4, type:'Number',    align:'Left', pad:' '},
-    {id: nextId(), name:'Gap',  length:2, type:'Space',     align:'Left', pad:' '},
-    {id: nextId(), name:'Code', length:4, type:'Uppercase', align:'Left', pad:' '},
-    {id: nextId(), name:'Tag',  length:3, type:'Modifiers', align:'Left', pad:' '},
+    {id: nextId(), name:'ID',   length:4, type:'Number'},
+    {id: nextId(), name:'Gap',  length:2, type:'Space'},
+    {id: nextId(), name:'Code', length:4, type:'Uppercase'},
+    {id: nextId(), name:'Tag',  length:3, type:'Modifiers'},
   ];
   renderAll();
 }
@@ -384,14 +375,13 @@ function randomChars(charset, length){
 
 function generateValueForField(field){
   const length = field.length || 0;
-  const padChar = (field.pad && field.pad.length === 1) ? field.pad : ' ';
   switch(field.type){
     case 'Number': return randomChars(DIGIT_CHARS, length);
     case 'Uppercase': return randomChars(UPPER_CHARS, length);
     case 'Lowercase': return randomChars(LOWER_CHARS, length);
     case 'Modifiers': return randomChars(MODIFIER_CHARS, length);
     case 'Space':
-    default: return padChar.repeat(length).slice(0, length);
+    default: return ' '.repeat(length);
   }
 }
 
@@ -410,28 +400,8 @@ function renderFieldTable(){
     tr.appendChild(makeCell(inputNumber(f.length, v => { f.length = Math.max(0, parseInt(v)||0); renderAll(); })));
     tr.appendChild(makeCell(selectEl(TYPES, f.type, v => {
       f.type = v;
-      f.align = defaultAlignFor(v);
       renderAll();
     })));
-
-    const alignCell = document.createElement('td');
-    if(TYPES_WITH_ALIGN.includes(f.type)){
-      alignCell.appendChild(selectEl(ALIGNS, f.align, v => { f.align = v; renderAll(); }));
-    } else {
-      alignCell.innerHTML = '<span style="color:var(--ink-soft);font-family:var(--mono);font-size:12px;">—</span>';
-    }
-    tr.appendChild(alignCell);
-
-    const padCell = document.createElement('td');
-    if(f.type === 'Space'){
-      const padInput = inputText(f.pad, v => { f.pad = (v || ' ').slice(0,1); renderAll(); });
-      padInput.classList.add('pad-input');
-      padInput.maxLength = 1;
-      padCell.appendChild(padInput);
-    } else {
-      padCell.innerHTML = '<span style="color:var(--ink-soft);font-family:var(--mono);font-size:12px;">—</span>';
-    }
-    tr.appendChild(padCell);
 
     const delCell = document.createElement('td');
     const delBtn = document.createElement('button');
@@ -545,7 +515,7 @@ function splitLine(line){
 }
 
 function looksLikeHeader(tokens){
-  return tokens.some(t => ['length','type','name','align','pad'].includes(t.toLowerCase()));
+  return tokens.some(t => ['length','type','name'].includes(t.toLowerCase()));
 }
 
 function parseFieldDefs(text){
@@ -561,7 +531,7 @@ function parseFieldDefs(text){
 
   const parsed = [];
   rows.forEach((cols, idx) => {
-    let name, length, type, align, pad;
+    let name, length, type;
     if(cols.length <= 2){
       length = parseInt(cols[0], 10);
       type = cols[1];
@@ -570,8 +540,6 @@ function parseFieldDefs(text){
       name = cols[0] || ('Field' + (idx + 1));
       length = parseInt(cols[1], 10);
       type = cols[2];
-      align = cols[3];
-      pad = cols[4];
     }
     if(isNaN(length)){
       warnings.push(`Row ${idx+1}: couldn't read a length ("${cols.join(' ')}") — skipped.`);
@@ -581,9 +549,7 @@ function parseFieldDefs(text){
     if(!TYPES.find(t => t.toLowerCase() === String(type||'').toLowerCase())){
       warnings.push(`Row ${idx+1}: type "${type}" not recognized — defaulted to Lowercase.`);
     }
-    const normAlign = ALIGNS.find(a => a.toLowerCase() === String(align||'').toLowerCase()) || defaultAlignFor(normType);
-    const normPad = (pad && pad.length >= 1) ? pad.slice(0,1) : ' ';
-    parsed.push({id: nextId(), name, length, type: normType, align: normAlign, pad: normPad});
+    parsed.push({id: nextId(), name, length, type: normType});
   });
   return {fields: parsed, warnings};
 }
@@ -607,7 +573,7 @@ function renderAll(){
 
 // ---------- Wire up UI ----------
 document.getElementById('addFieldBtn').onclick = () => {
-  fields.push({id: nextId(), name: 'Field' + (fields.length+1), length: 5, type: 'Lowercase', align: 'Left', pad: ' '});
+  fields.push({id: nextId(), name: 'Field' + (fields.length+1), length: 5, type: 'Lowercase'});
   renderAll();
 };
 
