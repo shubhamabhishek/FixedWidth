@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fixed-Width Output Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F5F3EC;
+    --paper-alt:#EBE8DE;
+    --panel:#FFFFFF;
+    --ink:#181B1D;
+    --ink-soft:#5B6166;
+    --line:#DAD6C9;
+    --accent:#B5720A;
+    --accent-soft:#F0DFC0;
+    --accent2:#31507D;
+    --accent2-soft:#DDE4EE;
+    --good:#2E7D4F;
+    --bad:#B23A2E;
+    --mono:'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    --sans:'IBM Plex Sans', system-ui, sans-serif;
+    --radius:6px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--sans);
+    padding:32px 24px 80px;
+  }
+  .app{max-width:980px;margin:0 auto;}
+  header{margin-bottom:28px;}
+  header .eyebrow{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--accent);
+    font-weight:600;
+  }
+  h1{
+    font-family:var(--mono);
+    font-size:28px;
+    font-weight:600;
+    margin:6px 0 6px;
+    letter-spacing:-0.01em;
+  }
+  header p{
+    color:var(--ink-soft);
+    margin:0;
+    font-size:14.5px;
+    max-width:620px;
+    line-height:1.5;
+  }
+
+  section{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:20px 22px;
+    margin-bottom:20px;
+  }
+  section > h2{
+    font-family:var(--mono);
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:.07em;
+    color:var(--ink-soft);
+    margin:0 0 4px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  section > h2 .num{
+    color:var(--accent);
+  }
+  section > .hint{
+    font-size:13px;
+    color:var(--ink-soft);
+    margin:0 0 16px;
+    line-height:1.5;
+  }
+
+  /* Field map — signature element: a to-scale bar of the record layout */
+  .fieldmap{
+    display:flex;
+    width:100%;
+    border-radius:4px;
+    overflow:hidden;
+    font-family:var(--mono);
+    font-size:11px;
+    margin-bottom:6px;
+    border:1px solid var(--line);
+    min-height:44px;
+  }
+  .fieldmap .seg{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:4px 2px;
+    border-right:1px solid rgba(255,255,255,.35);
+    color:#fff;
+    overflow:hidden;
+    white-space:nowrap;
+    text-overflow:ellipsis;
+    min-width:0;
+  }
+  .fieldmap .seg:last-child{border-right:none;}
+  .fieldmap .seg .nm{font-weight:600;}
+  .fieldmap .seg .ln{opacity:.85;font-size:10px;}
+  .fieldmap .seg.type-space{
+    background:repeating-linear-gradient(45deg, #C9C4B4, #C9C4B4 4px, #BDB8A6 4px, #BDB8A6 8px);
+    color:#4a473c;
+  }
+  .fieldmap .empty{
+    padding:12px;color:var(--ink-soft);font-size:12px;
+  }
+  .ruler{
+    display:flex;
+    font-family:var(--mono);
+    font-size:10px;
+    color:var(--ink-soft);
+    margin-bottom:16px;
+  }
+  .ruler span{
+    border-right:1px dashed var(--line);
+    padding-left:3px;
+    white-space:nowrap;
+    overflow:hidden;
+  }
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{
+    text-align:left;
+    font-family:var(--mono);
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    color:var(--ink-soft);
+    border-bottom:1px solid var(--line);
+    padding:6px 8px;
+    font-weight:500;
+  }
+  td{
+    border-bottom:1px solid var(--line);
+    padding:5px 6px;
+    vertical-align:middle;
+  }
+  tr:last-child td{border-bottom:none;}
+  input[type=text], input[type=number], select{
+    width:100%;
+    font-family:var(--mono);
+    font-size:13px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:6px 7px;
+    background:var(--paper-alt);
+    color:var(--ink);
+  }
+  input[type=text]:focus, input[type=number]:focus, select:focus{
+    outline:2px solid var(--accent2);
+    outline-offset:-1px;
+    background:#fff;
+  }
+  input.pad-input{text-align:center;}
+  .col-len{width:80px;}
+  .col-type{width:130px;}
+  .col-align{width:110px;}
+  .col-pad{width:70px;}
+  .col-del{width:36px;}
+
+  .icon-btn{
+    background:none;border:1px solid var(--line);border-radius:4px;
+    width:30px;height:30px;cursor:pointer;color:var(--bad);
+    font-family:var(--mono);font-size:15px;line-height:1;
+  }
+  .icon-btn:hover{background:#FBEAE7;border-color:var(--bad);}
+
+  .toolbar{
+    display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;
+    align-items:center;
+  }
+  button.btn{
+    font-family:var(--sans);
+    font-size:13.5px;
+    font-weight:500;
+    border-radius:4px;
+    padding:8px 14px;
+    cursor:pointer;
+    border:1px solid var(--line);
+    background:var(--paper-alt);
+    color:var(--ink);
+  }
+  button.btn:hover{background:#E2DECE;}
+  button.btn.primary{
+    background:var(--accent);
+    border-color:var(--accent);
+    color:#fff;
+  }
+  button.btn.primary:hover{background:#9C6008;}
+  button.btn.secondary{
+    background:var(--accent2);
+    border-color:var(--accent2);
+    color:#fff;
+  }
+  button.btn.secondary:hover{background:#25406a;}
+  button.btn.ghost{
+    background:transparent;
+  }
+
+  .rows-control{
+    display:flex;align-items:center;gap:8px;
+    font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);
+  }
+  .rows-control input{
+    width:70px;
+    font-family:var(--mono);
+    font-size:13px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:6px 7px;
+    background:var(--paper-alt);
+    color:var(--ink);
+  }
+
+  .paste-box{
+    display:none;
+    margin-top:14px;
+    border-top:1px dashed var(--line);
+    padding-top:14px;
+  }
+  .paste-box.open{display:block;}
+  .paste-box textarea{
+    width:100%;
+    min-height:110px;
+    font-family:var(--mono);
+    font-size:12.5px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:10px;
+    background:var(--paper-alt);
+    resize:vertical;
+  }
+  .paste-box .paste-actions{margin-top:8px;display:flex;gap:8px;align-items:center;}
+  .paste-note{font-size:12px;color:var(--ink-soft);margin-top:8px;line-height:1.5;}
+  .parse-msg{font-size:12.5px;margin-top:8px;font-family:var(--mono);}
+  .parse-msg.ok{color:var(--good);}
+  .parse-msg.warn{color:var(--bad);}
+
+  pre#output{
+    font-family:var(--mono);
+    font-size:13px;
+    background:var(--ink);
+    color:#EDEAE0;
+    padding:16px;
+    border-radius:6px;
+    overflow-x:auto;
+    white-space:pre;
+    line-height:1.6;
+    min-height:60px;
+    margin:0;
+  }
+  .output-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center;}
+  .char-count{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);}
+  .copy-flash{color:var(--good);font-size:12.5px;font-family:var(--mono);opacity:0;transition:opacity .2s;}
+  .copy-flash.show{opacity:1;}
+
+  .empty-state{
+    color:var(--ink-soft);
+    font-size:13px;
+    padding:10px 0;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="eyebrow">Utility</div>
+    <h1>Fixed-Width Output Generator</h1>
+    <p>Define the columns of a fixed-width record — length and type — and the tool randomly generates output lines that fit the spec exactly.</p>
+  </header>
+
+  <!-- FIELD DEFINITIONS -->
+  <section>
+    <h2><span class="num">01</span> Field Definitions</h2>
+    <p class="hint"><strong>Number</strong>, <strong>Uppercase</strong>, <strong>Lowercase</strong>, and <strong>Modifiers</strong> fill the full length with random digits, letters, or symbol characters. <strong>Space</strong> is always blank filler.</p>
+
+    <div id="fieldMap" class="fieldmap"></div>
+    <div id="ruler" class="ruler"></div>
+
+    <table id="fieldTable">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th class="col-len">Length</th>
+          <th class="col-type">Type</th>
+          <th class="col-align">Align</th>
+          <th class="col-pad">Pad</th>
+          <th class="col-del"></th>
+        </tr>
+      </thead>
+      <tbody id="fieldTableBody"></tbody>
+    </table>
+
+    <div class="toolbar">
+      <button class="btn primary" id="addFieldBtn">+ Add field</button>
+      <button class="btn" id="togglePasteFieldsBtn">Paste field list</button>
+      <label class="btn" for="csvFieldInput" style="margin:0;">Import CSV</label>
+      <input type="file" id="csvFieldInput" accept=".csv,text/csv" style="display:none;">
+      <button class="btn ghost" id="loadExampleBtn">Load example</button>
+    </div>
+
+    <div class="paste-box" id="pasteFieldsBox">
+      <textarea id="pasteFieldsText" placeholder="Paste from Excel or type, one field per line.&#10;Supported layouts:&#10;  Length&#9;Type&#10;  Name&#9;Length&#9;Type&#10;  Name&#9;Length&#9;Type&#9;Align&#9;Pad&#10;&#10;Types: Number, Uppercase, Lowercase, Modifiers, Space&#10;&#10;Example:&#10;4&#9;Number&#10;2&#9;Space&#10;4&#9;Uppercase&#10;3&#9;Modifiers"></textarea>
+      <div class="paste-actions">
+        <button class="btn primary" id="parseFieldsBtn">Parse &amp; replace fields</button>
+        <button class="btn ghost" id="cancelPasteFieldsBtn">Cancel</button>
+      </div>
+      <p class="paste-note">Paste a 2-column list (Length, Type) — names are auto-generated — or a 3+ column list (Name, Length, Type, [Align], [Pad]). Tab-separated (Excel paste) or comma-separated both work. A header row is detected and skipped automatically. Valid types: Number, Uppercase, Lowercase, Modifiers, Space.</p>
+      <div id="parseFieldsMsg"></div>
+    </div>
+  </section>
+
+  <!-- OUTPUT -->
+  <section>
+    <h2><span class="num">02</span> Output</h2>
+    <p class="hint">Every line is exactly <span id="totalWidthLabel">0</span> characters wide, randomly generated from the field definitions above.</p>
+    <pre id="output"></pre>
+    <div class="output-actions">
+      <button class="btn primary" id="generateBtn">↻ Generate</button>
+      <div class="rows-control">
+        Rows:
+        <input type="number" id="rowsToGenerate" min="1" max="1000" value="5">
+      </div>
+      <button class="btn secondary" id="downloadBtn">Download .txt</button>
+      <button class="btn" id="copyBtn">Copy to clipboard</button>
+      <span class="copy-flash" id="copyFlash">Copied</span>
+      <span class="char-count" id="lineCount"></span>
+    </div>
+  </section>
+
+</div>
+
+<script>
+// ---------- State ----------
+let fields = []; // {id, name, length, type, align, pad}
+let generatedLines = [];
+let uid = 1;
+const nextId = () => uid++;
+
+const TYPES = ['Number','Uppercase','Lowercase','Modifiers','Space'];
+const ALIGNS = ['Left','Right'];
+const TYPES_WITH_ALIGN = [];
+
+function defaultAlignFor(type){ return 'Left'; }
+
+const DIGIT_CHARS = '0123456789';
+const UPPER_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const LOWER_CHARS = 'abcdefghijklmnopqrstuvwxyz';
+const MODIFIER_CHARS = '!@#$%^&*()-_=+[]{}<>?/~';
+
+function loadExample(){
+  fields = [
+    {id: nextId(), name:'ID',   length:4, type:'Number',    align:'Left', pad:' '},
+    {id: nextId(), name:'Gap',  length:2, type:'Space',     align:'Left', pad:' '},
+    {id: nextId(), name:'Code', length:4, type:'Uppercase', align:'Left', pad:' '},
+    {id: nextId(), name:'Tag',  length:3, type:'Modifiers', align:'Left', pad:' '},
+  ];
+  renderAll();
+}
+
+// ---------- Random value generation ----------
+function randomChars(charset, length){
+  let s = '';
+  for(let i=0;i<length;i++) s += charset[Math.floor(Math.random()*charset.length)];
+  return s;
+}
+
+function generateValueForField(field){
+  const length = field.length || 0;
+  const padChar = (field.pad && field.pad.length === 1) ? field.pad : ' ';
+  switch(field.type){
+    case 'Number': return randomChars(DIGIT_CHARS, length);
+    case 'Uppercase': return randomChars(UPPER_CHARS, length);
+    case 'Lowercase': return randomChars(LOWER_CHARS, length);
+    case 'Modifiers': return randomChars(MODIFIER_CHARS, length);
+    case 'Space':
+    default: return padChar.repeat(length).slice(0, length);
+  }
+}
+
+function buildRandomLine(){
+  return fields.map(f => generateValueForField(f)).join('');
+}
+
+// ---------- Field table rendering ----------
+function renderFieldTable(){
+  const body = document.getElementById('fieldTableBody');
+  body.innerHTML = '';
+  fields.forEach(f => {
+    const tr = document.createElement('tr');
+
+    tr.appendChild(makeCell(inputText(f.name, v => { f.name = v; renderAll(); })));
+    tr.appendChild(makeCell(inputNumber(f.length, v => { f.length = Math.max(0, parseInt(v)||0); renderAll(); })));
+    tr.appendChild(makeCell(selectEl(TYPES, f.type, v => {
+      f.type = v;
+      f.align = defaultAlignFor(v);
+      renderAll();
+    })));
+
+    const alignCell = document.createElement('td');
+    if(TYPES_WITH_ALIGN.includes(f.type)){
+      alignCell.appendChild(selectEl(ALIGNS, f.align, v => { f.align = v; renderAll(); }));
+    } else {
+      alignCell.innerHTML = '<span style="color:var(--ink-soft);font-family:var(--mono);font-size:12px;">—</span>';
+    }
+    tr.appendChild(alignCell);
+
+    const padCell = document.createElement('td');
+    if(f.type === 'Space'){
+      const padInput = inputText(f.pad, v => { f.pad = (v || ' ').slice(0,1); renderAll(); });
+      padInput.classList.add('pad-input');
+      padInput.maxLength = 1;
+      padCell.appendChild(padInput);
+    } else {
+      padCell.innerHTML = '<span style="color:var(--ink-soft);font-family:var(--mono);font-size:12px;">—</span>';
+    }
+    tr.appendChild(padCell);
+
+    const delCell = document.createElement('td');
+    const delBtn = document.createElement('button');
+    delBtn.className = 'icon-btn';
+    delBtn.textContent = '✕';
+    delBtn.title = 'Remove field';
+    delBtn.onclick = () => { fields = fields.filter(x => x.id !== f.id); renderAll(); };
+    delCell.appendChild(delBtn);
+    tr.appendChild(delCell);
+
+    body.appendChild(tr);
+  });
+}
+
+function makeCell(el){ const td = document.createElement('td'); td.appendChild(el); return td; }
+
+function inputText(value, onChange){
+  const i = document.createElement('input');
+  i.type = 'text';
+  i.value = value;
+  i.oninput = () => onChange(i.value);
+  return i;
+}
+function inputNumber(value, onChange){
+  const i = document.createElement('input');
+  i.type = 'number';
+  i.min = '0';
+  i.value = value;
+  i.oninput = () => onChange(i.value);
+  return i;
+}
+function selectEl(options, value, onChange){
+  const s = document.createElement('select');
+  options.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o; opt.textContent = o;
+    if(o === value) opt.selected = true;
+    s.appendChild(opt);
+  });
+  s.onchange = () => onChange(s.value);
+  return s;
+}
+
+// ---------- Field map (signature visual) ----------
+const MAP_COLORS = ['#B5720A', '#31507D', '#5B7A54', '#8A4B6B', '#3E6E77', '#8A5A2A'];
+function renderFieldMap(){
+  const map = document.getElementById('fieldMap');
+  const ruler = document.getElementById('ruler');
+  map.innerHTML = '';
+  ruler.innerHTML = '';
+  const total = fields.reduce((s,f) => s + (f.length||0), 0);
+  if(total === 0){
+    map.innerHTML = '<div class="empty">Add a field to see the record layout</div>';
+    document.getElementById('totalWidthLabel').textContent = '0';
+    return;
+  }
+  let colorIdx = 0;
+  let pos = 0;
+  fields.forEach(f => {
+    const w = f.length || 0;
+    const seg = document.createElement('div');
+    seg.className = 'seg' + (f.type === 'Space' ? ' type-space' : '');
+    seg.style.flex = w + ' 0 0%';
+    if(f.type !== 'Space'){
+      seg.style.background = MAP_COLORS[colorIdx % MAP_COLORS.length];
+      colorIdx++;
+    }
+    seg.innerHTML = `<span class="nm">${escapeHtml(f.name)}</span><span class="ln">${w} ch</span>`;
+    map.appendChild(seg);
+
+    const rSpan = document.createElement('span');
+    rSpan.style.flex = w + ' 0 0%';
+    rSpan.textContent = pos + 1;
+    ruler.appendChild(rSpan);
+    pos += w;
+  });
+  document.getElementById('totalWidthLabel').textContent = total;
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---------- Output generation ----------
+function renderOutput(){
+  const out = document.getElementById('output');
+  const rowsInput = document.getElementById('rowsToGenerate');
+  const n = Math.max(1, Math.min(1000, parseInt(rowsInput.value, 10) || 1));
+
+  if(fields.length === 0 || fields.reduce((s,f)=>s+(f.length||0),0) === 0){
+    generatedLines = [];
+    out.textContent = '';
+    document.getElementById('lineCount').textContent = '';
+    return;
+  }
+
+  generatedLines = [];
+  for(let i=0;i<n;i++) generatedLines.push(buildRandomLine());
+
+  out.textContent = generatedLines.join('\n');
+  const total = fields.reduce((s,f)=>s+(f.length||0),0);
+  document.getElementById('lineCount').textContent =
+    `${generatedLines.length} line${generatedLines.length===1?'':'s'} · ${total} chars each`;
+}
+
+// ---------- Paste / CSV parsing: fields ----------
+function splitLine(line){
+  if(line.includes('\t')) return line.split('\t').map(s => s.trim());
+  if(line.includes(',')) return line.split(',').map(s => s.trim());
+  return line.trim().split(/\s+/);
+}
+
+function looksLikeHeader(tokens){
+  return tokens.some(t => ['length','type','name','align','pad'].includes(t.toLowerCase()));
+}
+
+function parseFieldDefs(text){
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length);
+  if(lines.length === 0) return {fields: [], warnings: ['No text to parse.']};
+
+  let rows = lines.map(splitLine);
+  const warnings = [];
+  if(rows.length && looksLikeHeader(rows[0])){
+    rows = rows.slice(1);
+  }
+  if(rows.length === 0) return {fields: [], warnings: ['Only a header row was found.']};
+
+  const parsed = [];
+  rows.forEach((cols, idx) => {
+    let name, length, type, align, pad;
+    if(cols.length <= 2){
+      length = parseInt(cols[0], 10);
+      type = cols[1];
+      name = 'Field' + (idx + 1);
+    } else {
+      name = cols[0] || ('Field' + (idx + 1));
+      length = parseInt(cols[1], 10);
+      type = cols[2];
+      align = cols[3];
+      pad = cols[4];
+    }
+    if(isNaN(length)){
+      warnings.push(`Row ${idx+1}: couldn't read a length ("${cols.join(' ')}") — skipped.`);
+      return;
+    }
+    const normType = TYPES.find(t => t.toLowerCase() === String(type||'').toLowerCase()) || 'Lowercase';
+    if(!TYPES.find(t => t.toLowerCase() === String(type||'').toLowerCase())){
+      warnings.push(`Row ${idx+1}: type "${type}" not recognized — defaulted to Lowercase.`);
+    }
+    const normAlign = ALIGNS.find(a => a.toLowerCase() === String(align||'').toLowerCase()) || defaultAlignFor(normType);
+    const normPad = (pad && pad.length >= 1) ? pad.slice(0,1) : ' ';
+    parsed.push({id: nextId(), name, length, type: normType, align: normAlign, pad: normPad});
+  });
+  return {fields: parsed, warnings};
+}
+
+// ---------- CSV file import ----------
+function readFileAsText(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+
+// ---------- Render everything ----------
+function renderAll(){
+  renderFieldMap();
+  renderFieldTable();
+  renderOutput();
+}
+
+// ---------- Wire up UI ----------
+document.getElementById('addFieldBtn').onclick = () => {
+  fields.push({id: nextId(), name: 'Field' + (fields.length+1), length: 5, type: 'Lowercase', align: 'Left', pad: ' '});
+  renderAll();
+};
+
+document.getElementById('loadExampleBtn').onclick = loadExample;
+
+document.getElementById('generateBtn').onclick = renderOutput;
+document.getElementById('rowsToGenerate').oninput = renderOutput;
+
+// Paste fields
+const pasteFieldsBox = document.getElementById('pasteFieldsBox');
+document.getElementById('togglePasteFieldsBtn').onclick = () => pasteFieldsBox.classList.toggle('open');
+document.getElementById('cancelPasteFieldsBtn').onclick = () => { pasteFieldsBox.classList.remove('open'); document.getElementById('parseFieldsMsg').innerHTML=''; };
+document.getElementById('parseFieldsBtn').onclick = () => {
+  const text = document.getElementById('pasteFieldsText').value;
+  const {fields: parsed, warnings} = parseFieldDefs(text);
+  const msg = document.getElementById('parseFieldsMsg');
+  if(parsed.length === 0){
+    msg.innerHTML = `<div class="parse-msg warn">Nothing parsed. ${warnings.join(' ')}</div>`;
+    return;
+  }
+  fields = parsed;
+  msg.innerHTML = `<div class="parse-msg ok">Loaded ${parsed.length} field${parsed.length===1?'':'s'}.${warnings.length ? ' ' + warnings.join(' ') : ''}</div>`;
+  renderAll();
+};
+
+// CSV import for fields
+document.getElementById('csvFieldInput').onchange = async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const text = await readFileAsText(file);
+  const {fields: parsed, warnings} = parseFieldDefs(text);
+  if(parsed.length){
+    fields = parsed;
+    renderAll();
+  }
+  e.target.value = '';
+  if(warnings.length){
+    document.getElementById('pasteFieldsBox').classList.add('open');
+    document.getElementById('parseFieldsMsg').innerHTML = `<div class="parse-msg warn">${warnings.join(' ')}</div>`;
+  }
+};
+
+// Output actions
+document.getElementById('downloadBtn').onclick = () => {
+  const blob = new Blob([generatedLines.join('\n')], {type: 'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'fixed-width-output.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+document.getElementById('copyBtn').onclick = async () => {
+  const text = document.getElementById('output').textContent;
+  const flash = document.getElementById('copyFlash');
+  try{
+    await navigator.clipboard.writeText(text);
+    flash.textContent = 'Copied';
+  } catch(err){
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try{ document.execCommand('copy'); flash.textContent = 'Copied'; }
+    catch(e2){ flash.textContent = 'Select the text above and copy manually'; }
+    document.body.removeChild(ta);
+  }
+  flash.classList.add('show');
+  setTimeout(() => flash.classList.remove('show'), 1600);
+};
+
+// ---------- Init ----------
+loadExample();
+</script>
+</body>
+</html>
