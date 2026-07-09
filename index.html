@@ -152,7 +152,7 @@
     vertical-align:middle;
   }
   tr:last-child td{border-bottom:none;}
-  input[type=text], input[type=number], select{
+  input[type=text], input[type=number], input[type=date], select{
     width:100%;
     font-family:var(--mono);
     font-size:13px;
@@ -162,14 +162,40 @@
     background:var(--paper-alt);
     color:var(--ink);
   }
-  input[type=text]:focus, input[type=number]:focus, select:focus{
+  input[type=text]:focus, input[type=number]:focus, input[type=date]:focus, select:focus{
     outline:2px solid var(--accent2);
     outline-offset:-1px;
     background:#fff;
   }
+  input:disabled{
+    opacity:.6;
+    cursor:not-allowed;
+    background:var(--paper);
+  }
+  .col-handle{width:28px;}
   .col-len{width:80px;}
-  .col-type{width:130px;}
+  .col-type{width:140px;}
+  .col-value{width:150px;}
   .col-del{width:36px;}
+  .cell-note{
+    color:var(--ink-soft);
+    font-family:var(--mono);
+    font-size:12px;
+  }
+
+  .drag-handle-cell{text-align:center;}
+  .drag-handle{
+    display:inline-block;
+    cursor:grab;
+    color:var(--ink-soft);
+    font-size:16px;
+    line-height:1;
+    padding:4px 6px;
+    user-select:none;
+  }
+  .drag-handle:active{cursor:grabbing;}
+  tr.dragging{opacity:.4;}
+  tr.drag-over{box-shadow:0 -2px 0 0 var(--accent2);}
 
   .icon-btn{
     background:none;border:1px solid var(--line);border-radius:4px;
@@ -286,7 +312,7 @@
   <!-- FIELD DEFINITIONS -->
   <section>
     <h2><span class="num">01</span> Field Definitions</h2>
-    <p class="hint"><strong>Number</strong>, <strong>Uppercase</strong>, <strong>Lowercase</strong>, and <strong>Modifiers</strong> fill the full length with random digits, letters, or symbol characters. <strong>Space</strong> is always blank filler.</p>
+    <p class="hint"><strong>Number</strong>, <strong>Uppercase</strong>, <strong>Lowercase</strong>, and <strong>Modifiers</strong> fill the full length with random digits, letters, or symbol characters. <strong>Constant</strong> always outputs whatever you type in the Value column (length is locked to match). <strong>Date</strong> outputs the picked date as YYYYMMDD. <strong>Space</strong> is always blank filler. Drag the handle on the left to reorder fields.</p>
 
     <div id="fieldMap" class="fieldmap"></div>
     <div id="ruler" class="ruler"></div>
@@ -294,9 +320,11 @@
     <table id="fieldTable">
       <thead>
         <tr>
+          <th class="col-handle"></th>
           <th>Name</th>
           <th class="col-len">Length</th>
           <th class="col-type">Type</th>
+          <th class="col-value">Value</th>
           <th class="col-del"></th>
         </tr>
       </thead>
@@ -312,12 +340,12 @@
     </div>
 
     <div class="paste-box" id="pasteFieldsBox">
-      <textarea id="pasteFieldsText" placeholder="Paste from Excel or type, one field per line.&#10;Supported layouts:&#10;  Length&#9;Type&#10;  Name&#9;Length&#9;Type&#10;&#10;Types: Number, Uppercase, Lowercase, Modifiers, Space&#10;&#10;Example:&#10;4&#9;Number&#10;2&#9;Space&#10;4&#9;Uppercase&#10;3&#9;Modifiers"></textarea>
+      <textarea id="pasteFieldsText" placeholder="Paste from Excel or type, one field per line.&#10;Supported layouts:&#10;  Length&#9;Type&#10;  Name&#9;Length&#9;Type&#10;&#10;Types: Number, Uppercase, Lowercase, Modifiers, Space, Constant, Date&#10;(Constant's value/length and Date's picked date are set afterward in the table)&#10;&#10;Example:&#10;4&#9;Number&#10;2&#9;Space&#10;4&#9;Uppercase&#10;3&#9;Modifiers"></textarea>
       <div class="paste-actions">
         <button class="btn primary" id="parseFieldsBtn">Parse &amp; replace fields</button>
         <button class="btn ghost" id="cancelPasteFieldsBtn">Cancel</button>
       </div>
-      <p class="paste-note">Paste a 2-column list (Length, Type) — names are auto-generated — or a 3-column list (Name, Length, Type). Tab-separated (Excel paste) or comma-separated both work. A header row is detected and skipped automatically. Valid types: Number, Uppercase, Lowercase, Modifiers, Space.</p>
+      <p class="paste-note">Paste a 2-column list (Length, Type) — names are auto-generated — or a 3-column list (Name, Length, Type). Tab-separated (Excel paste) or comma-separated both work. A header row is detected and skipped automatically. Valid types: Number, Uppercase, Lowercase, Modifiers, Space, Constant, Date. For Constant, set the output value afterward in the Value column — length auto-adjusts to match. For Date, the date defaults to today and can be changed afterward in the table.</p>
       <div id="parseFieldsMsg"></div>
     </div>
   </section>
@@ -349,19 +377,29 @@ let generatedLines = [];
 let uid = 1;
 const nextId = () => uid++;
 
-const TYPES = ['Number','Uppercase','Lowercase','Modifiers','Space'];
+const TYPES = ['Number','Uppercase','Lowercase','Modifiers','Space','Constant','Date'];
+const NON_EDITABLE_LENGTH_TYPES = ['Constant','Date'];
 
 const DIGIT_CHARS = '0123456789';
 const UPPER_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const LOWER_CHARS = 'abcdefghijklmnopqrstuvwxyz';
 const MODIFIER_CHARS = '!@#$%^&*()-_=+[]{}<>?/~';
 
+function todayISO(){
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function loadExample(){
   fields = [
-    {id: nextId(), name:'ID',   length:4, type:'Number'},
-    {id: nextId(), name:'Gap',  length:2, type:'Space'},
-    {id: nextId(), name:'Code', length:4, type:'Uppercase'},
-    {id: nextId(), name:'Tag',  length:3, type:'Modifiers'},
+    {id: nextId(), name:'ID',         length:4, type:'Number'},
+    {id: nextId(), name:'Gap',        length:2, type:'Space'},
+    {id: nextId(), name:'Code',       length:4, type:'Uppercase'},
+    {id: nextId(), name:'RecordType', length:3, type:'Constant', constantValue:'REC'},
+    {id: nextId(), name:'AsOf',       length:8, type:'Date', dateValue: todayISO()},
   ];
   renderAll();
 }
@@ -380,6 +418,18 @@ function generateValueForField(field){
     case 'Uppercase': return randomChars(UPPER_CHARS, length);
     case 'Lowercase': return randomChars(LOWER_CHARS, length);
     case 'Modifiers': return randomChars(MODIFIER_CHARS, length);
+    case 'Constant': {
+      const val = String(field.constantValue || '');
+      if(val.length >= length) return val.slice(0, length);
+      return val + ' '.repeat(length - val.length);
+    }
+    case 'Date': {
+      const iso = field.dateValue || todayISO();
+      const [y, m, d] = iso.split('-');
+      const compact = `${y}${m}${d}`;
+      if(compact.length >= length) return compact.slice(0, length);
+      return compact + ' '.repeat(length - compact.length);
+    }
     case 'Space':
     default: return ' '.repeat(length);
   }
@@ -389,20 +439,145 @@ function buildRandomLine(){
   return fields.map(f => generateValueForField(f)).join('');
 }
 
-// ---------- Field table rendering ----------
+// ---------- Field table rendering (with drag-to-reorder) ----------
+let draggedId = null;
+
+function captureFocus(){
+  const active = document.activeElement;
+  if(!active || !active.closest || !active.closest('#fieldTableBody')) return null;
+  const tr = active.closest('tr');
+  if(!tr) return null;
+  return {
+    fieldId: tr.dataset.id,
+    role: active.dataset.role || null,
+    selStart: (typeof active.selectionStart === 'number') ? active.selectionStart : null,
+    selEnd: (typeof active.selectionEnd === 'number') ? active.selectionEnd : null,
+  };
+}
+
+function restoreFocus(info){
+  if(!info || !info.fieldId || !info.role) return;
+  const tr = document.querySelector(`#fieldTableBody tr[data-id="${info.fieldId}"]`);
+  if(!tr) return;
+  const el = tr.querySelector(`[data-role="${info.role}"]`);
+  if(!el) return;
+  el.focus();
+  if(info.selStart !== null && el.setSelectionRange){
+    try{ el.setSelectionRange(info.selStart, info.selEnd); }catch(e){}
+  }
+}
+
 function renderFieldTable(){
+  const focusInfo = captureFocus();
   const body = document.getElementById('fieldTableBody');
   body.innerHTML = '';
   fields.forEach(f => {
     const tr = document.createElement('tr');
+    tr.dataset.id = f.id;
 
-    tr.appendChild(makeCell(inputText(f.name, v => { f.name = v; renderAll(); })));
-    tr.appendChild(makeCell(inputNumber(f.length, v => { f.length = Math.max(0, parseInt(v)||0); renderAll(); })));
-    tr.appendChild(makeCell(selectEl(TYPES, f.type, v => {
-      f.type = v;
+    // Drag handle
+    const handleCell = document.createElement('td');
+    handleCell.className = 'drag-handle-cell';
+    const handle = document.createElement('span');
+    handle.className = 'drag-handle';
+    handle.textContent = '⠿';
+    handle.title = 'Drag to reorder';
+    handleCell.appendChild(handle);
+    tr.appendChild(handleCell);
+
+    handle.addEventListener('mousedown', () => { tr.draggable = true; });
+
+    tr.addEventListener('dragstart', (e) => {
+      draggedId = f.id;
+      tr.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(f.id));
+    });
+    tr.addEventListener('dragend', () => {
+      tr.draggable = false;
+      tr.classList.remove('dragging');
+      body.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
+      draggedId = null;
+    });
+    tr.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      tr.classList.add('drag-over');
+    });
+    tr.addEventListener('dragleave', () => { tr.classList.remove('drag-over'); });
+    tr.addEventListener('drop', (e) => {
+      e.preventDefault();
+      tr.classList.remove('drag-over');
+      const targetId = f.id;
+      if(draggedId === null || draggedId === targetId) return;
+      const fromIdx = fields.findIndex(x => x.id === draggedId);
+      const toIdx = fields.findIndex(x => x.id === targetId);
+      if(fromIdx === -1 || toIdx === -1) return;
+      const [moved] = fields.splice(fromIdx, 1);
+      fields.splice(toIdx, 0, moved);
+      draggedId = null;
       renderAll();
-    })));
+    });
 
+    // Name
+    const nameInput = inputText(f.name, v => {
+      f.name = v;
+      renderAll();
+    });
+    nameInput.dataset.role = 'name';
+    tr.appendChild(makeCell(nameInput));
+
+    // Length (locked for Constant/Date)
+    const lengthCell = document.createElement('td');
+    if(NON_EDITABLE_LENGTH_TYPES.includes(f.type)){
+      const lenInput = inputNumber(f.length, () => {});
+      lenInput.disabled = true;
+      lenInput.dataset.role = 'length';
+      lengthCell.appendChild(lenInput);
+    } else {
+      const lenInput = inputNumber(f.length, v => { f.length = Math.max(0, parseInt(v)||0); renderAll(); });
+      lenInput.dataset.role = 'length';
+      lengthCell.appendChild(lenInput);
+    }
+    tr.appendChild(lengthCell);
+
+    // Type
+    const typeSelect = selectEl(TYPES, f.type, v => {
+      f.type = v;
+      if(v === 'Constant'){
+        if(f.constantValue === undefined) f.constantValue = '';
+        f.length = f.constantValue.length;
+      }
+      if(v === 'Date'){ f.length = 8; if(!f.dateValue) f.dateValue = todayISO(); }
+      renderAll();
+    });
+    typeSelect.dataset.role = 'type';
+    tr.appendChild(makeCell(typeSelect));
+
+    // Value (Date gets a date picker, Constant gets a text input, others are informational)
+    const valueCell = document.createElement('td');
+    if(f.type === 'Date'){
+      const dateInput = document.createElement('input');
+      dateInput.type = 'date';
+      dateInput.value = f.dateValue || todayISO();
+      dateInput.dataset.role = 'value';
+      dateInput.oninput = () => { f.dateValue = dateInput.value; renderOutput(); };
+      valueCell.appendChild(dateInput);
+    } else if(f.type === 'Constant'){
+      const constInput = inputText(f.constantValue || '', v => {
+        f.constantValue = v;
+        f.length = v.length;
+        renderAll();
+      });
+      constInput.placeholder = 'Enter value';
+      constInput.dataset.role = 'value';
+      valueCell.appendChild(constInput);
+    } else {
+      valueCell.innerHTML = '<span class="cell-note">—</span>';
+    }
+    tr.appendChild(valueCell);
+
+    // Delete
     const delCell = document.createElement('td');
     const delBtn = document.createElement('button');
     delBtn.className = 'icon-btn';
@@ -414,6 +589,7 @@ function renderFieldTable(){
 
     body.appendChild(tr);
   });
+  restoreFocus(focusInfo);
 }
 
 function makeCell(el){ const td = document.createElement('td'); td.appendChild(el); return td; }
@@ -549,7 +725,10 @@ function parseFieldDefs(text){
     if(!TYPES.find(t => t.toLowerCase() === String(type||'').toLowerCase())){
       warnings.push(`Row ${idx+1}: type "${type}" not recognized — defaulted to Lowercase.`);
     }
-    parsed.push({id: nextId(), name, length, type: normType});
+    const parsedField = {id: nextId(), name, length, type: normType};
+    if(normType === 'Constant'){ parsedField.constantValue = ''; parsedField.length = 0; }
+    if(normType === 'Date'){ parsedField.length = 8; parsedField.dateValue = todayISO(); }
+    parsed.push(parsedField);
   });
   return {fields: parsed, warnings};
 }
@@ -570,6 +749,10 @@ function renderAll(){
   renderFieldTable();
   renderOutput();
 }
+
+document.addEventListener('mouseup', () => {
+  document.querySelectorAll('#fieldTableBody tr').forEach(r => { r.draggable = false; });
+});
 
 // ---------- Wire up UI ----------
 document.getElementById('addFieldBtn').onclick = () => {
